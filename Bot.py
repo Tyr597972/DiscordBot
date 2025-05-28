@@ -122,11 +122,11 @@ async def sanction_user(message):
 async def on_ready():
     print(f"{bot.user} is online!")
 
-    for guild in bot.guilds:
-        try:
-            await bot.tree.sync(guild=guild)
-        except Exception as e:
-            print(f"Sync error in {guild.name}: {e}")
+    try:
+        synced = await bot.tree.sync()  # 🔄 Synchronise toutes les commandes avec Discord
+        print(f"Commandes slash synchronisées : {len(synced)}")
+    except Exception as e:
+        print(f"Erreur lors de la synchronisation des commandes slash : {e}")
 
     clear_expired_strikes.start()
 
