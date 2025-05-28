@@ -218,10 +218,15 @@ async def play(interaction: discord.Interaction, song_query: str):
     voice_channel = interaction.user.voice.channel
     voice_client = interaction.guild.voice_client
 
-    if voice_client is None:
-        voice_client = await voice_channel.connect()
-    elif voice_client.channel != voice_channel:
-        await voice_client.move_to(voice_channel)
+    try:
+        if voice_client is None:
+            voice_client = await voice_channel.connect()
+        elif voice_client.channel != voice_channel:
+            await voice_client.move_to(voice_channel)
+    except Exception as e:
+        logging.error(f"Erreur en rejoignant le salon vocal : {e}")
+        await interaction.followup.send("❌ Impossible de rejoindre ton salon vocal.")
+        return
 
     ydl_options = {
         "format": "bestaudio[abr<=96]/bestaudio",
