@@ -11,7 +11,7 @@ import asyncio
 from datetime import timedelta, datetime, timezone
 import uuid
 import logging
-import traceback  # Import pour afficher les erreurs détaillées
+import traceback
 
 # Chargement des variables d'environnement
 load_dotenv()
@@ -123,7 +123,7 @@ async def on_ready():
     print(f"{bot.user} is online!")
 
     try:
-        synced = await bot.tree.sync()  # 🔄 Synchronise toutes les commandes avec Discord
+        synced = await bot.tree.sync()
         print(f"Commandes slash synchronisées : {len(synced)}")
     except Exception as e:
         print(f"Erreur lors de la synchronisation des commandes slash : {e}")
@@ -144,26 +144,22 @@ async def on_message(message):
 @bot.tree.command(name="play", description="Ajoute une musique à la file d'attente")
 @app_commands.describe(song_query="Search query")
 async def play(interaction: discord.Interaction, song_query: str):
-    await interaction.response.defer()
-
-    if not interaction.user.voice or not interaction.user.voice.channel:
-        await interaction.followup.send("Tu dois être dans un channel vocal pour lancer une musique.")
-        return
-
-    voice_channel = interaction.user.voice.channel
-    voice_client = interaction.guild.voice_client
-
     try:
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            await interaction.followup.send("Tu dois être dans un channel vocal pour lancer une musique.")
+            return
+
+        voice_channel = interaction.user.voice.channel
+        voice_client = interaction.guild.voice_client
+
         if voice_client is None:
             voice_client = await voice_channel.connect()
         elif voice_client.channel != voice_channel:
             await voice_client.move_to(voice_channel)
-    except Exception as e:
-        logging.error(f"Erreur en rejoignant le salon vocal : {e}")
-        await interaction.followup.send("❌ Impossible de rejoindre ton salon vocal.")
-        return
 
-    try:
         results = await search_ytdlp_async(f"ytsearch1:{song_query}")
         tracks = results.get("entries", [])
 
@@ -187,10 +183,15 @@ async def play(interaction: discord.Interaction, song_query: str):
             await interaction.followup.send(f"▶️ Lecture de : **{title}**")
             await play_next_song(voice_client, guild_id, interaction.channel)
 
+    except discord.errors.InteractionResponded:
+        pass  # Interaction déjà répondue
     except Exception as e:
         error_details = traceback.format_exc()
-        logging.error(f"Erreur recherche/lecture détaillée : {error_details}")
-        await interaction.followup.send("❌ Une erreur est survenue (voir logs Railway pour plus de détails).")
+        logging.error(f"Erreur dans /play : {error_details}")
+        try:
+            await interaction.followup.send("❌ Une erreur est survenue (voir logs).")
+        except discord.errors.InteractionResponded:
+            pass
 
 async def play_next_song(voice_client, guild_id, channel):
     if SONG_QUEUES[guild_id]:
@@ -213,7 +214,5 @@ async def play_next_song(voice_client, guild_id, channel):
         await voice_client.disconnect()
         SONG_QUEUES[guild_id] = deque()
 
-# Autres commandes slash (pause, resume, skip, stop, liste...) peuvent être rajoutées ici
-
-# Run the bot
+# Démarrer le bot
 bot.run(TOKEN)
