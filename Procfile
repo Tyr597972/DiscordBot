@@ -1,1 +1,1 @@
-worker: python nom_de_ton_fichier.py
+web: python Bot.py
