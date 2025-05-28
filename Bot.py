@@ -10,6 +10,7 @@ from collections import deque
 import asyncio
 from datetime import timedelta, datetime
 import uuid
+import logging
 
 # Chargement des variables d'environnement (notamment le token du bot)
 load_dotenv()
@@ -19,6 +20,8 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+
+logging.basicConfig(level=logging.DEBUG)
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -208,7 +211,6 @@ async def sync(interaction: discord.Interaction):
 async def play(interaction: discord.Interaction, song_query: str):
     await interaction.response.defer()
 
-    # ✅ Vérification si l'utilisateur est bien en vocal
     if not interaction.user.voice or not interaction.user.voice.channel:
         await interaction.followup.send("Tu dois être dans un channel vocal pour lancer une musique.")
         return
@@ -229,28 +231,35 @@ async def play(interaction: discord.Interaction, song_query: str):
     }
 
     query = "ytsearch1: " + song_query
-    results = await search_ytdlp_async(query, ydl_options)
-    tracks = results.get("entries", [])
 
-    if tracks is None:
-        await interaction.followup.send("Aucun résultat trouvé.")
-        return
+    try:
+        results = await search_ytdlp_async(query, ydl_options)
+        tracks = results.get("entries", [])
 
-    first_track = tracks[0]
-    audio_url = first_track["url"]
-    title = first_track.get("title", "Untitled")
+        if not tracks:
+            await interaction.followup.send("❌ Aucun résultat trouvé.")
+            return
 
-    guild_id = str(interaction.guild_id)
-    if SONG_QUEUES.get(guild_id) is None:
-        SONG_QUEUES[guild_id] = deque()
+        first_track = tracks[0]
+        audio_url = first_track["url"]
+        title = first_track.get("title", "Untitled")
 
-    SONG_QUEUES[guild_id].append((audio_url, title))
+        guild_id = str(interaction.guild_id)
+        if SONG_QUEUES.get(guild_id) is None:
+            SONG_QUEUES[guild_id] = deque()
 
-    if voice_client.is_playing() or voice_client.is_paused():
-        await interaction.followup.send(f"Added to queue: **{title}**")
-    else:
-        await interaction.followup.send(f"Ajouté à la liste: **{title}**")
-        await play_next_song(voice_client, guild_id, interaction.channel)
+        SONG_QUEUES[guild_id].append((audio_url, title))
+
+        if voice_client.is_playing() or voice_client.is_paused():
+            await interaction.followup.send(f"✅ Ajouté à la file d'attente : **{title}**")
+        else:
+            await interaction.followup.send(f"▶️ Lecture de : **{title}**")
+            await play_next_song(voice_client, guild_id, interaction.channel)
+
+    except Exception as e:
+        logging.error(f"Erreur lors de la recherche de musique : {e}")
+        await interaction.followup.send("❌ Une erreur est survenue pendant la recherche.")
+
 
 async def play_next_song(voice_client, guild_id, channel):
     if SONG_QUEUES[guild_id]:
